@@ -3,18 +3,11 @@ FROM node:26-bookworm
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git gosu procps python3 tini build-essential zip unzip util-linux && rm -rf /var/lib/apt/lists/*
 RUN npm install -g --allow-scripts=openclaw openclaw@2026.9.2 && npm install -g clawhub@latest
 
-# Pre-install the official Codex plugin during image build so Railway runtime
-# does not have to run a memory-heavy npm install on the small service instance.
-RUN mkdir -p /opt/openclaw-plugin-seed && \
-    OPENCLAW_STATE_DIR=/opt/openclaw-plugin-seed \
-    openclaw plugins install npm:@openclaw/codex@2026.9.2
-
-# OpenClaw's internal install layout may vary between releases. Resolve the
-# installed package at build time and expose one stable immutable path.
-RUN CODEX_PKG="$(find /opt/openclaw-plugin-seed -type f -name package.json -exec grep -l '"'"'"name"'"'"[[:space:]]*:[[:space:]]*"'"'"@openclaw/codex"'"'"' {} \; | head -n 1)" && \
-    test -n "$CODEX_PKG" && \
-    ln -s "$(dirname "$CODEX_PKG")" /opt/codex-plugin && \
-    test -f /opt/codex-plugin/package.json
+# Install the official Codex plugin into a deterministic immutable path.
+# Runtime only links this package into OpenClaw; nothing large is copied to /data.
+RUN mkdir -p /opt/codex-runtime && \
+    npm install --prefix /opt/codex-runtime @openclaw/codex@2026.9.2 && \
+    test -f /opt/codex-runtime/node_modules/@openclaw/codex/package.json
 
 WORKDIR /tmp
 RUN git clone --depth 1 https://github.com/arjunkomath/openclaw-railway-template.git upstream
@@ -27,7 +20,7 @@ COPY patch-single-gateway.py /tmp/patch-single-gateway.py
 RUN python3 /tmp/patch-single-gateway.py && rm /tmp/patch-single-gateway.py
 RUN npm install -g pnpm@11.24.0 && pnpm install --frozen-lockfile --prod
 
-RUN useradd -m -s /bin/bash openclaw && chown -R openclaw:openclaw /app && mkdir -p /data && chown openclaw:openclaw /data && mkdir -p /home/linuxbrew/.linuxbrew && chown -R openclaw:openclaw /home/linuxbrew && chown -R openclaw:openclaw /opt/openclaw-plugin-seed
+RUN useradd -m -s /bin/bash openclaw && chown -R openclaw:openclaw /app && mkdir -p /data && chown openclaw:openclaw /data && mkdir -p /home/linuxbrew/.linuxbrew && chown -R openclaw:openclaw /home/linuxbrew && chown -R openclaw:openclaw /opt/codex-runtime
 USER openclaw
 RUN NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
