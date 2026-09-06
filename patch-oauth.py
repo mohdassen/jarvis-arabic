@@ -7,23 +7,44 @@ patch=r'''
 // Jarvis browser OAuth bridge: password-protected and limited to OpenAI device-code auth.
 let jarvisOauth = { proc: null, output: "", state: "idle", exitCode: null };
 
+function jarvisOauthParsed() {
+  const text = stripAnsi(jarvisOauth.output || "").replace(/\r/g, "");
+  const urls = text.match(/https?:\/\/[^\s<>"']+/g) || [];
+  const url = urls.find(u => /auth\.openai\.com\/codex\/device/i.test(u)) || urls.find(u => /auth\.openai\.com/i.test(u)) || "https://auth.openai.com/codex/device";
+  const patterns = [/\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/g, /\b[A-Z0-9]{4}(?:-[A-Z0-9]{4}){1,3}\b/g, /\b[A-Z0-9]{8}\b/g];
+  let code = "";
+  for (const p of patterns) { const m = text.match(p); if (m && m.length) { code = m[0]; break; } }
+  const useful = text.split("\n").filter(l => l.trim() && !/Waiting for device authorization/i.test(l) && !/^[\\|\/().\-\s]+$/.test(l)).slice(-8).join("\n");
+  return { url, code, useful };
+}
+
+function jarvisOauthHtml() {
+  const x = jarvisOauthParsed();
+  const running = jarvisOauth.state === "running";
+  const success = jarvisOauth.state === "success";
+  const failed = jarvisOauth.state === "failed";
+  const esc = v => String(v || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const refresh = running ? '<meta http-equiv="refresh" content="2">' : '';
+  let body = '';
+  if (success) {
+    body = '<div class="card ok">SUCCESS — ChatGPT connected.</div><p><a class="login" href="/openclaw">Open Jarvis</a></p>';
+  } else if (failed) {
+    body = '<div class="card bad">Login failed.</div>' + (x.useful ? '<pre class="error">'+esc(x.useful)+'</pre>' : '') + '<form method="post" action="/setup/oauth/start"><button type="submit">Try Again</button></form>';
+  } else if (running) {
+    body = '<div class="card"><div class="status">OpenAI authorization is running</div><p><a class="login" href="'+esc(x.url)+'" target="_blank" rel="noopener">Open ChatGPT Login</a></p><div class="label">Device Code</div><div class="code">'+(x.code ? esc(x.code) : 'Generating…')+'</div><small>أدخل هذا الكود في صفحة OpenAI. ستتحدث هذه الصفحة تلقائياً.</small></div>';
+  } else {
+    body = '<form method="post" action="/setup/oauth/start"><button type="submit">Start ChatGPT Login</button></form><div class="card status">Ready.</div>';
+  }
+  return '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">'+refresh+'<title>Jarvis - ChatGPT Login</title><style>body{font-family:system-ui,-apple-system,sans-serif;max-width:680px;margin:24px auto;padding:20px;color:#111}h1{font-size:34px;margin-bottom:12px}.lead{font-size:18px;line-height:1.6}button,.login{display:inline-block;font-size:18px;font-weight:700;padding:14px 20px;border:0;border-radius:12px;background:#111;color:#fff;text-decoration:none}.card{margin:18px 0;padding:18px;border:1px solid #ddd;border-radius:16px;background:#fafafa}.code{font:700 32px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:2px;overflow-wrap:anywhere}.status{font-size:17px;font-weight:600}.label{margin-top:12px}.ok{background:#f1fff3}.bad{background:#fff3f3}.error{white-space:pre-wrap;background:#fff3f3;padding:12px;border-radius:10px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}small{color:#666}</style></head><body><h1>Jarvis - ChatGPT Login</h1><p class="lead">تسجيل دخول OpenAI بدون JavaScript. اضغط الزر مرة واحدة فقط.</p>'+body+'</body></html>';
+}
+
 app.get("/setup/oauth", requireSetupAuth, (_req, res) => {
-  res.type("html").send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Jarvis - ChatGPT Login</title><style>
-body{font-family:system-ui,-apple-system,sans-serif;max-width:680px;margin:24px auto;padding:20px;color:#111}h1{font-size:34px;margin-bottom:12px}.lead{font-size:18px;line-height:1.6}button,.login{display:inline-block;font-size:18px;font-weight:700;padding:14px 20px;border:0;border-radius:12px;background:#111;color:#fff;text-decoration:none}.card{margin:18px 0;padding:18px;border:1px solid #ddd;border-radius:16px;background:#fafafa}.hidden{display:none}.code{font:700 32px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:2px;overflow-wrap:anywhere}.status{font-size:17px;font-weight:600}.error{white-space:pre-wrap;background:#fff3f3;padding:12px;border-radius:10px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}small{color:#666}
-</style></head><body><h1>Jarvis - ChatGPT Login</h1><p class="lead">اضغط الزر مرة واحدة. سيظهر فقط رابط OpenAI ورمز تسجيل الدخول.</p><button id="start">Start ChatGPT Login</button><div id="auth" class="card hidden"><div class="status">جاهز لتسجيل الدخول</div><p><a id="login" class="login" href="https://auth.openai.com/codex/device" target="_blank" rel="noopener">Open ChatGPT Login</a></p><div>Device Code</div><div id="code" class="code">Preparing…</div><small>أدخل هذا الكود في صفحة OpenAI. لا ترسله لأي شخص.</small></div><div id="state" class="card status">Ready.</div><pre id="err" class="error hidden"></pre><script>
-const state=document.getElementById('state'),auth=document.getElementById('auth'),login=document.getElementById('login'),code=document.getElementById('code'),start=document.getElementById('start'),err=document.getElementById('err');
-function clean(s){return (s||'').replace(/\x1b\[[0-?]*[ -\/]*[@-~]/g,'').replace(/\r/g,'')}
-function parse(s){const text=clean(s);const urls=text.match(/https?:\/\/[^\s<>"']+/g)||[];const url=urls.find(u=>/auth\.openai\.com\/codex\/device/i.test(u))||urls.find(u=>/auth\.openai\.com/i.test(u))||'https://auth.openai.com/codex/device';
- const patterns=[/\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/g,/\b[A-Z0-9]{4}(?:-[A-Z0-9]{4}){1,3}\b/g,/\b[A-Z0-9]{8}\b/g]; let c=''; for(const p of patterns){const m=text.match(p);if(m&&m.length){c=m[0];break}}
- const useful=text.split('\n').filter(l=>l.trim()&&!/Waiting for device authorization/i.test(l)&&!/^[\\|\/().\-\s]+$/.test(l)).slice(-8).join('\n');return {url,code:c,useful}}
-start.onclick=async()=>{start.disabled=true;auth.classList.remove('hidden');code.textContent='Preparing…';state.textContent='Preparing device authorization…';err.classList.add('hidden');await fetch('/setup/api/oauth/start',{method:'POST',credentials:'same-origin',cache:'no-store'});poll()};
-async function poll(){try{const r=await fetch('/setup/api/oauth/status',{credentials:'same-origin',cache:'no-store'});const j=await r.json();const x=parse(j.output);login.href=x.url;if(x.code){code.textContent=x.code;state.textContent='افتح OpenAI وأدخل الكود أعلاه.'}else if(j.state==='running'){state.textContent='Generating Device Code…'}if(j.state==='running'){setTimeout(poll,700)}else if(j.state==='success'){state.textContent='SUCCESS — ChatGPT connected.';auth.classList.add('hidden');start.disabled=true}else if(j.state==='failed'){state.textContent='Login failed.';start.disabled=false;if(x.useful){err.textContent=x.useful;err.classList.remove('hidden')}}else{start.disabled=false}}catch(e){state.textContent='Status error';err.textContent=String(e);err.classList.remove('hidden');start.disabled=false}}
-poll();
-</script></body></html>`);
+  res.set("Cache-Control","no-store, no-cache, must-revalidate");
+  res.type("html").send(jarvisOauthHtml());
 });
 
-app.post("/setup/api/oauth/start", requireSetupAuth, async (_req, res) => {
-  if (jarvisOauth.proc && jarvisOauth.state === "running") return res.json({ok:true,state:"running"});
+async function startJarvisOauth() {
+  if (jarvisOauth.proc && jarvisOauth.state === "running") return;
   jarvisOauth = { proc: null, output: "", state: "running", exitCode: null };
   const args = clawArgs(["models","auth","login","--provider","openai","--device-code"]);
   const openclawCmd = [OPENCLAW_NODE, ...args].map(v => JSON.stringify(String(v))).join(" ");
@@ -47,9 +68,15 @@ app.post("/setup/api/oauth/start", requireSetupAuth, async (_req, res) => {
     } else jarvisOauth.state="failed";
     jarvisOauth.proc=null;
   });
-  res.set("Cache-Control","no-store"); res.json({ok:true,state:"running"});
+}
+
+app.post("/setup/oauth/start", requireSetupAuth, async (_req, res) => {
+  await startJarvisOauth();
+  res.redirect(303, "/setup/oauth");
 });
 
+// Keep API endpoints for diagnostics/backward compatibility.
+app.post("/setup/api/oauth/start", requireSetupAuth, async (_req, res) => { await startJarvisOauth(); res.set("Cache-Control","no-store"); res.json({ok:true,state:jarvisOauth.state}); });
 app.get("/setup/api/oauth/status", requireSetupAuth, (_req,res) => { res.set("Cache-Control","no-store, no-cache, must-revalidate"); res.set("Pragma","no-cache"); res.json({ok:true,state:jarvisOauth.state,exitCode:jarvisOauth.exitCode,output:jarvisOauth.output}); });
 
 '''
