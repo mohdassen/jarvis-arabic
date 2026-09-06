@@ -4,7 +4,7 @@ set -e
 STATE_DIR="${OPENCLAW_STATE_DIR:-/data/.openclaw}"
 WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-/data/workspace}"
 SEED_DIR="/opt/jarvis-workspace"
-PLUGIN_SEED_DIR="/opt/openclaw-plugin-seed"
+CODEX_PLUGIN_DIR="/opt/codex-plugin"
 
 # Recovery first: remove only reproducible caches/assets that previously filled
 # the small Railway volume. Preserve config, OAuth credentials, sessions,
@@ -23,31 +23,22 @@ for f in AGENTS.md SOUL.md IDENTITY.md USER.md MEMORY.md; do
   fi
 done
 
-# Older recovery logic exposed the whole npm tree through a symlink. Remove
-# that legacy link if present. OpenClaw needs an install record, not only files.
+# Remove the legacy npm-tree symlink from earlier recovery attempts.
 if [ -L "$STATE_DIR/npm" ]; then
   rm -f "$STATE_DIR/npm"
 fi
 mkdir -p "$STATE_DIR/npm"
 
-# The official Codex plugin is prebuilt into the immutable image. Register it
-# with OpenClaw as a linked local plugin so the install metadata is persisted in
-# /data while the large plugin payload stays in the image and consumes no
-# persistent-volume capacity.
-CODEX_PLUGIN_DIR="$(find "$PLUGIN_SEED_DIR" -type f -name openclaw.plugin.json -print 2>/dev/null | head -n 1 | xargs -r dirname)"
-if [ -n "$CODEX_PLUGIN_DIR" ] && [ -d "$CODEX_PLUGIN_DIR" ]; then
-  if ! gosu openclaw env \
-      OPENCLAW_STATE_DIR="$STATE_DIR" \
-      OPENCLAW_WORKSPACE_DIR="$WORKSPACE_DIR" \
-      openclaw plugins inspect codex --json >/tmp/codex-inspect.json 2>/dev/null; then
-    echo "[jarvis] registering Codex plugin from $CODEX_PLUGIN_DIR"
-    gosu openclaw env \
-      OPENCLAW_STATE_DIR="$STATE_DIR" \
-      OPENCLAW_WORKSPACE_DIR="$WORKSPACE_DIR" \
-      openclaw plugins install --link "$CODEX_PLUGIN_DIR" --force
-  fi
+# Codex is resolved to this stable path at Docker build time. Register it as a
+# linked plugin on every container start; --force keeps this idempotent while
+# persisting only lightweight install metadata in /data.
+if [ -d "$CODEX_PLUGIN_DIR" ] && [ -f "$CODEX_PLUGIN_DIR/package.json" ]; then
+  echo "[jarvis] registering Codex plugin from $CODEX_PLUGIN_DIR"
+  gosu openclaw env \
+    OPENCLAW_STATE_DIR="$STATE_DIR" \
+    OPENCLAW_WORKSPACE_DIR="$WORKSPACE_DIR" \
+    openclaw plugins install --link "$CODEX_PLUGIN_DIR" --force
 
-  # Explicitly enable it. This is idempotent and keeps the existing config.
   gosu openclaw env \
     OPENCLAW_STATE_DIR="$STATE_DIR" \
     OPENCLAW_WORKSPACE_DIR="$WORKSPACE_DIR" \
@@ -56,7 +47,7 @@ if [ -n "$CODEX_PLUGIN_DIR" ] && [ -d "$CODEX_PLUGIN_DIR" ]; then
       exit 1
     }
 else
-  echo "[jarvis] ERROR: prebuilt Codex plugin directory not found" >&2
+  echo "[jarvis] ERROR: normalized Codex plugin path is missing" >&2
   exit 1
 fi
 
