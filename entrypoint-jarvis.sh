@@ -4,7 +4,7 @@ set -e
 STATE_DIR="${OPENCLAW_STATE_DIR:-/data/.openclaw}"
 WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-/data/workspace}"
 SEED_DIR="/opt/jarvis-workspace"
-CODEX_PLUGIN_DIR="/opt/codex-plugin"
+CODEX_PLUGIN_DIR="/opt/codex-runtime/node_modules/@openclaw/codex"
 
 # Recovery first: remove only reproducible caches/assets that previously filled
 # the small Railway volume. Preserve config, OAuth credentials, sessions,
@@ -29,9 +29,8 @@ if [ -L "$STATE_DIR/npm" ]; then
 fi
 mkdir -p "$STATE_DIR/npm"
 
-# Codex is resolved to this stable path at Docker build time. Register it as a
-# linked plugin on every container start; --force keeps this idempotent while
-# persisting only lightweight install metadata in /data.
+# Register the immutable, preinstalled Codex package into the persistent
+# OpenClaw state. This writes only lightweight install metadata to /data.
 if [ -d "$CODEX_PLUGIN_DIR" ] && [ -f "$CODEX_PLUGIN_DIR/package.json" ]; then
   echo "[jarvis] registering Codex plugin from $CODEX_PLUGIN_DIR"
   gosu openclaw env \
@@ -47,7 +46,7 @@ if [ -d "$CODEX_PLUGIN_DIR" ] && [ -f "$CODEX_PLUGIN_DIR/package.json" ]; then
       exit 1
     }
 else
-  echo "[jarvis] ERROR: normalized Codex plugin path is missing" >&2
+  echo "[jarvis] ERROR: Codex runtime package is missing at $CODEX_PLUGIN_DIR" >&2
   exit 1
 fi
 
