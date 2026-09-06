@@ -27,4 +27,4 @@ The Railway image seeds `AGENTS.md`, `SOUL.md`, `IDENTITY.md`, `USER.md`, and `M
 No reuse or integration of the old `personal-ai-agent` architecture unless a specific isolated component proves useful later.
 
 ## Status
-Railway runtime is healthy. Jarvis workspace bootstrap and browser-based OpenAI device-code OAuth bridge are implemented in source. Provider authentication remains runtime-only; credentials must never be committed.
+Railway runtime is healthy. Jarvis workspace bootstrap and browser-based OpenAI device-code OAuth bridge are implemented in source. The OAuth bridge uses a pseudo-TTY so OpenClaw's interactive safety check also works on Railway's headless runtime. Provider authentication remains runtime-only; credentials must never be committed.
