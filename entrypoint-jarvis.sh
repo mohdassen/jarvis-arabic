@@ -6,15 +6,21 @@ WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-/data/workspace}"
 SEED_DIR="/opt/jarvis-workspace"
 PLUGIN_SEED_DIR="/opt/openclaw-plugin-seed"
 
+# Recovery first: previous deploys copied large runtime assets into the small
+# persistent Railway volume and filled it. These paths contain reproducible
+# binaries/caches only; OAuth credentials, OpenClaw config, workspace and memory
+# are intentionally left untouched.
+rm -rf /data/.linuxbrew 2>/dev/null || true
+rm -rf "$STATE_DIR/npm/projects" 2>/dev/null || true
+rm -rf "$STATE_DIR/npm/.cache" "$STATE_DIR/cache" 2>/dev/null || true
+
 mkdir -p /data "$STATE_DIR" "$WORKSPACE_DIR" "$WORKSPACE_DIR/memory"
 chown -R openclaw:openclaw /data
 chmod 700 /data
 
-if [ ! -d /data/.linuxbrew ]; then
-  cp -a /home/linuxbrew/.linuxbrew /data/.linuxbrew
-fi
-rm -rf /home/linuxbrew/.linuxbrew
-ln -sfn /data/.linuxbrew /home/linuxbrew/.linuxbrew
+# Keep Homebrew in the immutable container image instead of duplicating it on
+# the persistent volume. It can be recreated on every image build and should
+# not consume /data capacity.
 
 for f in AGENTS.md SOUL.md IDENTITY.md USER.md MEMORY.md; do
   if [ ! -f "$WORKSPACE_DIR/$f" ] && [ -f "$SEED_DIR/$f" ]; then
@@ -22,11 +28,12 @@ for f in AGENTS.md SOUL.md IDENTITY.md USER.md MEMORY.md; do
   fi
 done
 
-# Seed the prebuilt OpenClaw npm plugin project into persistent state.
-# This only touches managed npm/plugin files and leaves OAuth/config intact.
+# Expose the prebuilt plugin payload from the image without copying hundreds of
+# MB into /data. A symlink is enough because the image remains mounted for the
+# life of the container.
 if [ -d "$PLUGIN_SEED_DIR/npm" ]; then
-  mkdir -p "$STATE_DIR/npm"
-  cp -a "$PLUGIN_SEED_DIR/npm/." "$STATE_DIR/npm/"
+  rm -rf "$STATE_DIR/npm"
+  ln -s "$PLUGIN_SEED_DIR/npm" "$STATE_DIR/npm"
 fi
 
 chown -R openclaw:openclaw "$STATE_DIR" "$WORKSPACE_DIR"
