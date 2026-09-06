@@ -9,6 +9,13 @@ RUN mkdir -p /opt/openclaw-plugin-seed && \
     OPENCLAW_STATE_DIR=/opt/openclaw-plugin-seed \
     openclaw plugins install npm:@openclaw/codex@2026.9.2
 
+# OpenClaw's internal install layout may vary between releases. Resolve the
+# installed package at build time and expose one stable immutable path.
+RUN CODEX_PKG="$(find /opt/openclaw-plugin-seed -type f -name package.json -exec grep -l '"'"'"name"'"'"[[:space:]]*:[[:space:]]*"'"'"@openclaw/codex"'"'"' {} \; | head -n 1)" && \
+    test -n "$CODEX_PKG" && \
+    ln -s "$(dirname "$CODEX_PKG")" /opt/codex-plugin && \
+    test -f /opt/codex-plugin/package.json
+
 WORKDIR /tmp
 RUN git clone --depth 1 https://github.com/arjunkomath/openclaw-railway-template.git upstream
 WORKDIR /app
