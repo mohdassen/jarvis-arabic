@@ -3,6 +3,12 @@ FROM node:26-bookworm
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git gosu procps python3 tini build-essential zip unzip util-linux && rm -rf /var/lib/apt/lists/*
 RUN npm install -g --allow-scripts=openclaw openclaw@2026.9.2 && npm install -g clawhub@latest
 
+# Pre-install the official Codex plugin during image build so Railway runtime
+# does not have to run a memory-heavy npm install on the small service instance.
+RUN mkdir -p /opt/openclaw-plugin-seed && \
+    OPENCLAW_STATE_DIR=/opt/openclaw-plugin-seed \
+    openclaw plugins install npm:@openclaw/codex@2026.9.2
+
 WORKDIR /tmp
 RUN git clone --depth 1 https://github.com/arjunkomath/openclaw-railway-template.git upstream
 WORKDIR /app
@@ -12,7 +18,7 @@ COPY patch-oauth.py /tmp/patch-oauth.py
 RUN python3 /tmp/patch-oauth.py && rm /tmp/patch-oauth.py
 RUN npm install -g pnpm@11.24.0 && pnpm install --frozen-lockfile --prod
 
-RUN useradd -m -s /bin/bash openclaw && chown -R openclaw:openclaw /app && mkdir -p /data && chown openclaw:openclaw /data && mkdir -p /home/linuxbrew/.linuxbrew && chown -R openclaw:openclaw /home/linuxbrew
+RUN useradd -m -s /bin/bash openclaw && chown -R openclaw:openclaw /app && mkdir -p /data && chown openclaw:openclaw /data && mkdir -p /home/linuxbrew/.linuxbrew && chown -R openclaw:openclaw /home/linuxbrew && chown -R openclaw:openclaw /opt/openclaw-plugin-seed
 USER openclaw
 RUN NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
