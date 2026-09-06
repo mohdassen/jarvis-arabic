@@ -16,6 +16,8 @@ RUN cp -a /tmp/upstream/. /app/ && rm -rf /tmp/upstream /app/.git
 
 COPY patch-oauth.py /tmp/patch-oauth.py
 RUN python3 /tmp/patch-oauth.py && rm /tmp/patch-oauth.py
+COPY patch-single-gateway.py /tmp/patch-single-gateway.py
+RUN python3 /tmp/patch-single-gateway.py && rm /tmp/patch-single-gateway.py
 RUN npm install -g pnpm@11.24.0 && pnpm install --frozen-lockfile --prod
 
 RUN useradd -m -s /bin/bash openclaw && chown -R openclaw:openclaw /app && mkdir -p /data && chown openclaw:openclaw /data && mkdir -p /home/linuxbrew/.linuxbrew && chown -R openclaw:openclaw /home/linuxbrew && chown -R openclaw:openclaw /opt/openclaw-plugin-seed
