@@ -12,7 +12,7 @@ rm -rf /data/.linuxbrew 2>/dev/null || true
 rm -rf "$STATE_DIR/npm/projects" 2>/dev/null || true
 rm -rf "$STATE_DIR/npm/.cache" "$STATE_DIR/cache" 2>/dev/null || true
 
-mkdir -p /data "$STATE_DIR" "$WORKSPACE_DIR" "$WORKSPACE_DIR/memory" "$GOG_HOME"
+mkdir -p /data "$STATE_DIR" "$WORKSPACE_DIR" "$WORKSPACE_DIR/memory" "$WORKSPACE_DIR/skills" "$GOG_HOME"
 chown -R openclaw:openclaw /data
 chmod 700 /data "$GOG_HOME"
 
@@ -36,6 +36,12 @@ for f in AGENTS.md SOUL.md IDENTITY.md USER.md MEMORY.md; do
     cp "$SEED_DIR/$f" "$WORKSPACE_DIR/$f"
   fi
 done
+
+# Skills are application code, not user memory. Keep the managed Jarvis skills
+# synchronized on each deploy while leaving personal memory files untouched.
+if [ -d "$SEED_DIR/skills" ]; then
+  cp -a "$SEED_DIR/skills/." "$WORKSPACE_DIR/skills/"
+fi
 
 if [ -L "$STATE_DIR/npm" ]; then
   rm -f "$STATE_DIR/npm"
