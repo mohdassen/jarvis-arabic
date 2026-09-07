@@ -3,6 +3,20 @@ FROM node:26-bookworm
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates curl git gosu procps python3 tini build-essential zip unzip util-linux && rm -rf /var/lib/apt/lists/*
 RUN npm install -g --allow-scripts=openclaw openclaw@2026.9.2 && npm install -g clawhub@latest
 
+# Install gog (official OpenClaw Google Workspace CLI) as a small immutable binary.
+ARG GOG_VERSION=0.39.1
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) gog_arch=amd64 ;; \
+      arm64) gog_arch=arm64 ;; \
+      *) echo "Unsupported architecture for gog: $arch" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/openclaw/gogcli/releases/download/v${GOG_VERSION}/gogcli_${GOG_VERSION}_linux_${gog_arch}.tar.gz" \
+      | tar -xz -C /usr/local/bin gog; \
+    chmod 0755 /usr/local/bin/gog; \
+    gog --version
+
 # Install the official Codex plugin into a deterministic immutable path.
 # Runtime only links this package into OpenClaw; nothing large is copied to /data.
 RUN mkdir -p /opt/codex-runtime && \
@@ -35,6 +49,8 @@ ENV PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${PATH}
 ENV HOMEBREW_PREFIX="/home/linuxbrew/.linuxbrew"
 ENV HOMEBREW_CELLAR="/home/linuxbrew/.linuxbrew/Cellar"
 ENV HOMEBREW_REPOSITORY="/home/linuxbrew/.linuxbrew/Homebrew"
+ENV GOG_HOME="/data/gog"
+ENV GOG_KEYRING_BACKEND="file"
 ENV PORT=8080
 ENV OPENCLAW_ENTRY=/usr/local/lib/node_modules/openclaw/dist/entry.js
 ENV OPENCLAW_SUPERVISOR_MODE=external
