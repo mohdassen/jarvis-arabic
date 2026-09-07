@@ -38,6 +38,8 @@ COPY patch-single-gateway.py /tmp/patch-single-gateway.py
 RUN python3 /tmp/patch-single-gateway.py && rm /tmp/patch-single-gateway.py
 COPY patch-inference-test.py /tmp/patch-inference-test.py
 RUN python3 /tmp/patch-inference-test.py && rm /tmp/patch-inference-test.py
+COPY patch-google.py /tmp/patch-google.py
+RUN python3 /tmp/patch-google.py && rm /tmp/patch-google.py
 RUN npm install -g pnpm@11.24.0 && pnpm install --frozen-lockfile --prod
 
 RUN useradd -m -s /bin/bash openclaw && chown -R openclaw:openclaw /app && mkdir -p /data && chown openclaw:openclaw /data && mkdir -p /home/linuxbrew/.linuxbrew && chown -R openclaw:openclaw /home/linuxbrew && chown -R openclaw:openclaw /opt/codex-runtime
