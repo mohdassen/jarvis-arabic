@@ -12,9 +12,13 @@ RUN set -eux; \
       arm64) gog_arch=arm64 ;; \
       *) echo "Unsupported architecture for gog: $arch" >&2; exit 1 ;; \
     esac; \
+    tmpdir="$(mktemp -d)"; \
     curl -fsSL "https://github.com/openclaw/gogcli/releases/download/v${GOG_VERSION}/gogcli_${GOG_VERSION}_linux_${gog_arch}.tar.gz" \
-      | tar -xz -C /usr/local/bin gog; \
-    chmod 0755 /usr/local/bin/gog; \
+      | tar -xz -C "$tmpdir"; \
+    gog_bin="$(find "$tmpdir" -type f \( -name gog -o -name gogcli \) | head -n 1)"; \
+    test -n "$gog_bin"; \
+    install -m 0755 "$gog_bin" /usr/local/bin/gog; \
+    rm -rf "$tmpdir"; \
     gog --version
 
 # Install the official Codex plugin into a deterministic immutable path.
